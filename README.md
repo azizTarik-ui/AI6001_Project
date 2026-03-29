@@ -1,5 +1,5 @@
-# AI6001_Project_Name_Here
-
+# AI6001_Chess_Realm
+<!-- T
 Instructions:
 
 * Click the `Use this template` green button in the top-right of the repo
@@ -8,11 +8,11 @@ Instructions:
 * Click the pencil icon in the top-right of this section to edit straight from the GitHub website
 * Edit your `README.md` file to include your group info, and remove this instruction section
 * Once your project has been submitted, you can change it to public
-
+-->
 Project Group Members:
 
-* Group Member Name 1 (Student ID #, email)
-* Group Member Name 2 (Student ID #, email)
+* Ahammed Tarik Aziz (Student ID: 202483493, email: atarikaziz@mun.ca)
+* Biplav Adhikari (Student ID: 202581517, email: biplava@mun.ca)
 
 Project URL
 
