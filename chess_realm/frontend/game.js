@@ -25,6 +25,7 @@ let selectedSquare = null;
 let lastMove       = null;
 let legalMoves     = [];
 let audioContext   = null;
+let moveHistory = []; 
 let moveHistory = []; // tracks all moves made this game
 
 // ─── RESIGN ──────────────────────────────────────────────────
@@ -348,6 +349,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   playMoveSound(isCapture);
 
   moveHistory.push({ from: `${fromRow},${fromCol}`, to: `${toRow},${toCol}` });
+
 
   recordBoard(board);
 
