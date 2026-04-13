@@ -24,6 +24,7 @@ let currentTurn    = "white";
 let selectedSquare = null;
 let lastMove       = null;
 let legalMoves     = [];
+let audioContext   = null;
 
 // ─── RESIGN ──────────────────────────────────────────────────
 
@@ -50,6 +51,41 @@ function isOpponent(p) {
 
 function inBounds(r, c) {
   return r >= 0 && r <= 7 && c >= 0 && c <= 7;
+}
+
+function getAudioContext() {
+  if (!audioContext) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return null;
+    audioContext = new AudioCtor();
+  }
+  return audioContext;
+}
+
+function playMoveSound(isCapture) {
+  const context = getAudioContext();
+  if (!context) return;
+
+  if (context.state === "suspended") {
+    context.resume();
+  }
+
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const gainNode = context.createGain();
+
+  oscillator.type = isCapture ? "triangle" : "sine";
+  oscillator.frequency.setValueAtTime(isCapture ? 280 : 220, now);
+  oscillator.frequency.exponentialRampToValueAtTime(isCapture ? 180 : 140, now + 0.12);
+
+  gainNode.gain.setValueAtTime(0.0001, now);
+  gainNode.gain.exponentialRampToValueAtTime(isCapture ? 0.12 : 0.08, now + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.18);
 }
 
 // ─── RAW MOVES (no check filtering) ──────────────────────────
@@ -302,9 +338,11 @@ function drawBoard() {
 // ─── MOVE ────────────────────────────────────────────────────
 
 function movePiece(fromRow, fromCol, toRow, toCol) {
+  const isCapture = board[toRow][toCol] !== "";
   board[toRow][toCol] = board[fromRow][fromCol];
   board[fromRow][fromCol] = "";
   lastMove = { row: toRow, col: toCol };
+  playMoveSound(isCapture);
 
   recordBoard(board);
 
