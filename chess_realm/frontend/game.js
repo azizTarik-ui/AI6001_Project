@@ -26,12 +26,14 @@ let lastMove       = null;
 let legalMoves     = [];
 let audioContext   = null;
 let moveHistory = []; 
+let moveHistory = []; // tracks all moves made this game
 
 // ─── RESIGN ──────────────────────────────────────────────────
 
 function resignGame() {
   statusEl.textContent = "You resigned. Game over.";
   currentTurn = "over";
+  // Add this line:
   saveGame("loss");
 }
 
@@ -361,6 +363,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
     const winner = currentTurn === "white" ? "Black wins!" : "White wins!";
     statusEl.textContent = "Checkmate! " + winner;
     currentTurn = "over";
+    // Add this line:
     saveGame(currentTurn === "white" ? "loss" : "win");
     drawBoard();
     return;
@@ -369,6 +372,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   if (state === "stalemate") {
     statusEl.textContent = "Stalemate! It's a draw.";
     currentTurn = "over";
+    // Add this line:
     saveGame("draw");
     drawBoard();
     return;
@@ -449,6 +453,9 @@ canvas.addEventListener("click", function(event) {
   }
 });
 
+// ─── SAVE GAME TO BACKEND ─────────────────────────────────────
+
+// Call this when the game ends (checkmate, stalemate, or resign)
 async function saveGame(result) {
   const username = localStorage.getItem("username");
   if (!username) return; // not logged in, skip saving
