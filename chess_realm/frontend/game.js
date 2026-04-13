@@ -1,19 +1,14 @@
-const canvas    = document.getElementById("chessBoard");
-const ctx       = canvas.getContext("2d");
-const statusEl  = document.getElementById("status");
-const movesEl   = document.getElementById("moves");
+const canvas = document.getElementById("chessBoard");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
 
 const SQUARE_SIZE = 60;
-
-// ── Colors ──────────────────────────────────────────────────
 const LIGHT      = "#f0d9b5";
 const DARK       = "#b58863";
-const HL_SELECT  = "#f6f669cc";   // selected square — yellow
-const HL_MOVE    = "#cdd16e99";   // last-moved square — soft green
-const HL_LEGAL   = "#00000030";   // legal-move dot fill
-const HL_CAPTURE = "#ff000040";   // capture target tint
+const HIGHLIGHT  = "#aef359";
+const MOVED_TO   = "#59aef3";
+const LEGAL_DOT  = "#00000033";
 
-// ── Board state ─────────────────────────────────────────────
 let board = [
   ["♜","♞","♝","♛","♚","♝","♞","♜"],
   ["♟","♟","♟","♟","♟","♟","♟","♟"],
@@ -29,279 +24,385 @@ let currentTurn    = "white";
 let selectedSquare = null;
 let lastMove       = null;
 let legalMoves     = [];
-let moveCount      = 0;      // full move counter (increments after black moves)
-let whiteMoveNum   = 0;      // move number shown in move list
 
-// ── Piece sets ───────────────────────────────────────────────
+// ─── RESIGN ──────────────────────────────────────────────────
+
+function resignGame() {
+  statusEl.textContent = "You resigned. Game over.";
+  currentTurn = "over";
+}
+
+// ─── PIECE HELPERS ───────────────────────────────────────────
+
 const whitePieces = ["♙","♖","♘","♗","♕","♔"];
 const blackPieces = ["♟","♜","♞","♝","♛","♚"];
 
-function isWhite(p)    { return whitePieces.includes(p); }
-function isBlack(p)    { return blackPieces.includes(p); }
-function isEmpty(p)    { return p === ""; }
-function isMine(p)     { return currentTurn === "white" ? isWhite(p) : isBlack(p); }
-function isOpponent(p) { return currentTurn === "white" ? isBlack(p) : isWhite(p); }
-function inBounds(r,c) { return r>=0 && r<=7 && c>=0 && c<=7; }
+function isWhite(p) { return whitePieces.includes(p); }
+function isBlack(p) { return blackPieces.includes(p); }
+function isEmpty(p) { return p === ""; }
 
-// ── Piece names for move list ────────────────────────────────
-const pieceNames = {
-  "♙":"P","♖":"R","♘":"N","♗":"B","♕":"Q","♔":"K",
-  "♟":"p","♜":"r","♞":"n","♝":"b","♛":"q","♚":"k"
-};
-const files = ["a","b","c","d","e","f","g","h"];
-function squareName(r,c) { return files[c] + (8 - r); }
-
-// ── Sound (Web Audio API — no file needed) ───────────────────
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-function playMove() {
-  // Soft wooden "thud"
-  const buf  = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) {
-    // Decaying noise — sounds like a piece being placed
-    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 6);
-  }
-  const src  = audioCtx.createBufferSource();
-  const gain = audioCtx.createGain();
-  src.buffer = buf;
-  gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
-  src.connect(gain);
-  gain.connect(audioCtx.destination);
-  src.start();
+function isMine(p) {
+  return currentTurn === "white" ? isWhite(p) : isBlack(p);
+}
+function isOpponent(p) {
+  return currentTurn === "white" ? isBlack(p) : isWhite(p);
 }
 
-function playCapture() {
-  // Two-layer crack — louder and sharper
-  [0, 0.04].forEach(delay => {
-    const buf  = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 4);
-    }
-    const src  = audioCtx.createBufferSource();
-    const gain = audioCtx.createGain();
-    src.buffer = buf;
-    gain.gain.setValueAtTime(0.6, audioCtx.currentTime + delay);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + 0.15);
-    src.connect(gain);
-    gain.connect(audioCtx.destination);
-    src.start(audioCtx.currentTime + delay);
-  });
+function inBounds(r, c) {
+  return r >= 0 && r <= 7 && c >= 0 && c <= 7;
 }
 
-// ── Legal moves ──────────────────────────────────────────────
-function getLegalMoves(row, col) {
+// ─── RAW MOVES (no check filtering) ──────────────────────────
+// These are the moves a piece can physically make,
+// before we check whether they leave the king in check.
+// We need a separate raw version to avoid infinite loops
+// when checking if the king is safe.
+
+function getRawMoves(board, row, col, color) {
   const piece = board[row][col];
   const moves = [];
 
-  function slide(dirs) {
-    for (const [dr,dc] of dirs) {
-      let r = row+dr, c = col+dc;
-      while (inBounds(r,c)) {
-        if (isEmpty(board[r][c]))           { moves.push({row:r,col:c}); }
-        else if (isOpponent(board[r][c]))   { moves.push({row:r,col:c}); break; }
-        else                                { break; }
-        r+=dr; c+=dc;
+  const myColor   = color;
+  const oppColor  = color === "white" ? "black" : "white";
+
+  function isMineRaw(p)  { return myColor  === "white" ? isWhite(p) : isBlack(p); }
+  function isOppRaw(p)   { return oppColor === "white" ? isWhite(p) : isBlack(p); }
+
+  function slide(directions) {
+    for (const [dr, dc] of directions) {
+      let r = row + dr;
+      let c = col + dc;
+      while (inBounds(r, c)) {
+        if (isEmpty(board[r][c])) {
+          moves.push({ row: r, col: c });
+        } else if (isOppRaw(board[r][c])) {
+          moves.push({ row: r, col: c });
+          break;
+        } else {
+          break;
+        }
+        r += dr;
+        c += dc;
       }
     }
   }
 
   function jump(targets) {
-    for (const [dr,dc] of targets) {
-      const r=row+dr, c=col+dc;
-      if (inBounds(r,c) && !isMine(board[r][c])) moves.push({row:r,col:c});
+    for (const [dr, dc] of targets) {
+      const r = row + dr;
+      const c = col + dc;
+      if (inBounds(r, c) && !isMineRaw(board[r][c])) {
+        moves.push({ row: r, col: c });
+      }
     }
   }
 
   if (piece === "♙") {
-    if (inBounds(row-1,col) && isEmpty(board[row-1][col])) {
-      moves.push({row:row-1,col});
-      if (row===6 && isEmpty(board[row-2][col])) moves.push({row:row-2,col});
+    if (inBounds(row-1, col) && isEmpty(board[row-1][col])) {
+      moves.push({ row: row-1, col });
+      if (row === 6 && isEmpty(board[row-2][col])) {
+        moves.push({ row: row-2, col });
+      }
     }
-    for (const dc of [-1,1])
-      if (inBounds(row-1,col+dc) && isBlack(board[row-1][col+dc]))
-        moves.push({row:row-1,col:col+dc});
-  }
-  if (piece === "♟") {
-    if (inBounds(row+1,col) && isEmpty(board[row+1][col])) {
-      moves.push({row:row+1,col});
-      if (row===1 && isEmpty(board[row+2][col])) moves.push({row:row+2,col});
+    for (const dc of [-1, 1]) {
+      if (inBounds(row-1, col+dc) && isBlack(board[row-1][col+dc])) {
+        moves.push({ row: row-1, col: col+dc });
+      }
     }
-    for (const dc of [-1,1])
-      if (inBounds(row+1,col+dc) && isWhite(board[row+1][col+dc]))
-        moves.push({row:row+1,col:col+dc});
   }
 
-  if (piece==="♖"||piece==="♜") slide([[1,0],[-1,0],[0,1],[0,-1]]);
-  if (piece==="♗"||piece==="♝") slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
-  if (piece==="♕"||piece==="♛") slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
-  if (piece==="♘"||piece==="♞") jump([[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]]);
-  if (piece==="♔"||piece==="♚") jump([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  if (piece === "♟") {
+    if (inBounds(row+1, col) && isEmpty(board[row+1][col])) {
+      moves.push({ row: row+1, col });
+      if (row === 1 && isEmpty(board[row+2][col])) {
+        moves.push({ row: row+2, col });
+      }
+    }
+    for (const dc of [-1, 1]) {
+      if (inBounds(row+1, col+dc) && isWhite(board[row+1][col+dc])) {
+        moves.push({ row: row+1, col: col+dc });
+      }
+    }
+  }
+
+  if (piece === "♖" || piece === "♜") {
+    slide([[1,0],[-1,0],[0,1],[0,-1]]);
+  }
+  if (piece === "♗" || piece === "♝") {
+    slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+  if (piece === "♕" || piece === "♛") {
+    slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+  if (piece === "♘" || piece === "♞") {
+    jump([[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]]);
+  }
+  if (piece === "♔" || piece === "♚") {
+    jump([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
 
   return moves;
 }
 
-// ── Draw ─────────────────────────────────────────────────────
+// ─── CHECK DETECTION ─────────────────────────────────────────
+// Returns true if the given color's king is under attack.
+
+function isInCheck(board, color) {
+  // Find the king
+  const kingSymbol = color === "white" ? "♔" : "♚";
+  let kingRow = -1, kingCol = -1;
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c] === kingSymbol) {
+        kingRow = r;
+        kingCol = c;
+      }
+    }
+  }
+
+  // If king not found (shouldn't happen), treat as check
+  if (kingRow === -1) return true;
+
+  // Check if any opponent piece can reach the king
+  const opponent = color === "white" ? "black" : "white";
+  const oppPieces = opponent === "white" ? whitePieces : blackPieces;
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (oppPieces.includes(board[r][c])) {
+        const attacks = getRawMoves(board, r, c, opponent);
+        for (const a of attacks) {
+          if (a.row === kingRow && a.col === kingCol) {
+            return true; // king is under attack
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+// ─── LEGAL MOVES (with check filtering) ──────────────────────
+// Same as raw moves, but removes any move that would leave
+// our own king in check.
+
+function getLegalMoves(row, col) {
+  const color = currentTurn;
+  const rawMoves = getRawMoves(board, row, col, color);
+  const safe = [];
+
+  for (const move of rawMoves) {
+    // Try the move on a copy of the board
+    const copy = board.map(r => [...r]);
+    copy[move.row][move.col] = copy[row][col];
+    copy[row][col] = "";
+
+    // Only keep the move if our king is not in check after it
+    if (!isInCheck(copy, color)) {
+      safe.push(move);
+    }
+  }
+
+  return safe;
+}
+
+// ─── ALL LEGAL MOVES FOR ONE SIDE ────────────────────────────
+// Used to detect checkmate and stalemate.
+
+function getAllLegalMoves(board, color) {
+  const pieces = color === "white" ? whitePieces : blackPieces;
+  const moves = [];
+  const saved = currentTurn;
+  currentTurn = color;
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (pieces.includes(board[r][c])) {
+        const pieceMoves = getLegalMoves(r, c);
+        for (const m of pieceMoves) {
+          moves.push({ fromRow: r, fromCol: c, toRow: m.row, toCol: m.col });
+        }
+      }
+    }
+  }
+
+  currentTurn = saved;
+  return moves;
+}
+
+// ─── GAME OVER CHECK ─────────────────────────────────────────
+// Call this after each move to see if the game has ended.
+// Returns "checkmate", "stalemate", or null.
+
+function getGameOverState(color) {
+  const moves = getAllLegalMoves(board, color);
+
+  if (moves.length === 0) {
+    if (isInCheck(board, color)) {
+      return "checkmate";
+    } else {
+      return "stalemate";
+    }
+  }
+  return null;
+}
+
+// ─── DRAW ────────────────────────────────────────────────────
+
 function drawBoard() {
-  for (let row=0; row<8; row++) {
-    for (let col=0; col<8; col++) {
-      const x = col * SQUARE_SIZE;
-      const y = row * SQUARE_SIZE;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
 
-      // Base square
-      ctx.fillStyle = (row+col)%2===0 ? LIGHT : DARK;
-      ctx.fillRect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+      let color = (row + col) % 2 === 0 ? LIGHT : DARK;
 
-      // Last-move highlight
-      if (lastMove && lastMove.to.row===row && lastMove.to.col===col) {
-        ctx.fillStyle = HL_MOVE;
-        ctx.fillRect(x, y, SQUARE_SIZE, SQUARE_SIZE);
-      }
-      if (lastMove && lastMove.from.row===row && lastMove.from.col===col) {
-        ctx.fillStyle = HL_MOVE;
-        ctx.fillRect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+      if (selectedSquare &&
+          selectedSquare.row === row &&
+          selectedSquare.col === col) {
+        color = HIGHLIGHT;
       }
 
-      // Selected square
-      if (selectedSquare && selectedSquare.row===row && selectedSquare.col===col) {
-        ctx.fillStyle = HL_SELECT;
-        ctx.fillRect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+      if (lastMove &&
+          lastMove.row === row &&
+          lastMove.col === col) {
+        color = MOVED_TO;
       }
 
-      // Draw piece
+      ctx.fillStyle = color;
+      ctx.fillRect(col*SQUARE_SIZE, row*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+
       const piece = board[row][col];
-      if (piece) {
-        // Shadow
-        ctx.shadowColor = "rgba(0,0,0,0.5)";
-        ctx.shadowBlur  = 4;
-        ctx.shadowOffsetY = 2;
-
-        ctx.font = "44px serif";
+      if (piece !== "") {
+        ctx.fillStyle = "black";
+        ctx.font = "40px Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "#000";
-        ctx.fillText(piece, x + SQUARE_SIZE/2, y + SQUARE_SIZE/2 + 2);
-
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur  = 0;
-        ctx.shadowOffsetY = 0;
+        ctx.fillText(
+          piece,
+          col*SQUARE_SIZE + SQUARE_SIZE/2,
+          row*SQUARE_SIZE + SQUARE_SIZE/2
+        );
       }
     }
   }
 
-  // Legal move dots / capture rings (drawn on top)
-  for (const m of legalMoves) {
-    const x = m.col * SQUARE_SIZE;
-    const y = m.row * SQUARE_SIZE;
-    const cx = x + SQUARE_SIZE/2;
-    const cy = y + SQUARE_SIZE/2;
-
-    if (!isEmpty(board[m.row][m.col])) {
-      // Capture: draw a ring around the square
-      ctx.strokeStyle = HL_CAPTURE;
-      ctx.lineWidth   = 5;
-      ctx.strokeRect(x+3, y+3, SQUARE_SIZE-6, SQUARE_SIZE-6);
-    } else {
-      // Empty: draw a small dark dot
-      ctx.fillStyle = HL_LEGAL;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 11, 0, Math.PI*2);
-      ctx.fill();
-    }
+  for (const { row, col } of legalMoves) {
+    ctx.fillStyle = LEGAL_DOT;
+    ctx.beginPath();
+    ctx.arc(
+      col*SQUARE_SIZE + SQUARE_SIZE/2,
+      row*SQUARE_SIZE + SQUARE_SIZE/2,
+      12, 0, Math.PI*2
+    );
+    ctx.fill();
   }
 }
 
-// ── Move list ────────────────────────────────────────────────
-let pendingWhiteMove = null;   // store white's notation until black moves
+// ─── MOVE ────────────────────────────────────────────────────
 
-function recordMove(fromRow, fromCol, toRow, toCol, isCapture) {
-  const piece = board[fromRow][fromCol];
-  const notation = pieceNames[piece] + squareName(toRow, toCol) +
-                   (isCapture ? "x" : "");
-
-  if (currentTurn === "white") {
-    whiteMoveNum++;
-    pendingWhiteMove = { num: whiteMoveNum, text: notation };
-  } else {
-    // Black just moved — append to white's entry
-    const entry = document.createElement("div");
-    entry.className = "move-entry";
-    const num   = pendingWhiteMove ? pendingWhiteMove.num : whiteMoveNum;
-    const white = pendingWhiteMove ? pendingWhiteMove.text : "...";
-    entry.innerHTML =
-      `<span class="move-num">${num}.</span>
-       <span class="move-text">${white}</span>
-       <span class="move-text" style="color:#8880a0">${notation}</span>`;
-    // Remove placeholder text
-    if (movesEl.querySelector("span[style]")) movesEl.innerHTML = "";
-    movesEl.appendChild(entry);
-    movesEl.scrollTop = movesEl.scrollHeight;
-    pendingWhiteMove = null;
-  }
-}
-
-// ── Execute move ─────────────────────────────────────────────
 function movePiece(fromRow, fromCol, toRow, toCol) {
-  const isCapture = !isEmpty(board[toRow][toCol]);
-
-  recordMove(fromRow, fromCol, toRow, toCol, isCapture);
-
   board[toRow][toCol] = board[fromRow][fromCol];
   board[fromRow][fromCol] = "";
+  lastMove = { row: toRow, col: toCol };
 
-  lastMove = { from:{row:fromRow,col:fromCol}, to:{row:toRow,col:toCol} };
+  recordBoard(board);
 
-  if (isCapture) playCapture();
-  else           playMove();
-
+  // Switch turns
   currentTurn = currentTurn === "white" ? "black" : "white";
 
-  const dot = `<span class="turn-dot"></span>`;
-  statusEl.innerHTML = currentTurn === "white"
-    ? dot + "Your turn (White)"
-    : dot + "Black's turn";
-}
+  // Check if the other side is now in checkmate or stalemate
+  const state = getGameOverState(currentTurn);
 
-// ── Click handler ────────────────────────────────────────────
-canvas.addEventListener("click", function(e) {
-  // Resume audio context on first interaction (browser rule)
-  if (audioCtx.state === "suspended") audioCtx.resume();
-
-  const rect = canvas.getBoundingClientRect();
-  const col  = Math.floor((e.clientX - rect.left)  / SQUARE_SIZE);
-  const row  = Math.floor((e.clientY - rect.top)   / SQUARE_SIZE);
-  const clickedPiece = board[row][col];
-
-  if (selectedSquare === null) {
-    if (!isMine(clickedPiece)) return;
-    selectedSquare = {row,col};
-    legalMoves = getLegalMoves(row,col);
+  if (state === "checkmate") {
+    const winner = currentTurn === "white" ? "Black wins!" : "White wins!";
+    statusEl.textContent = "Checkmate! " + winner;
+    currentTurn = "over";
     drawBoard();
     return;
   }
 
-  if (selectedSquare.row===row && selectedSquare.col===col) {
-    selectedSquare = null; legalMoves = []; drawBoard(); return;
+  if (state === "stalemate") {
+    statusEl.textContent = "Stalemate! It's a draw.";
+    currentTurn = "over";
+    drawBoard();
+    return;
+  }
+
+  // Warn if the current player is in check
+  if (isInCheck(board, currentTurn)) {
+    statusEl.textContent = currentTurn === "white"
+      ? "You are in check!"
+      : "AI is in check!";
+  }
+
+  // Let the AI move if it is black's turn
+  if (currentTurn === "black") {
+    if (!statusEl.textContent.includes("check")) {
+      statusEl.textContent = "AI is thinking...";
+    }
+    drawBoard();
+
+    setTimeout(() => {
+      const aiMove = getBestMove(board);
+      if (aiMove) {
+        movePiece(aiMove.fromRow, aiMove.fromCol, aiMove.toRow, aiMove.toCol);
+      }
+      drawBoard();
+    }, 100);
+
+  } else {
+    if (!statusEl.textContent.includes("check")) {
+      statusEl.textContent = "Your turn (White)";
+    }
+  }
+}
+
+// ─── CLICK ───────────────────────────────────────────────────
+
+canvas.addEventListener("click", function(event) {
+  if (currentTurn === "over" || currentTurn === "black") return;
+
+  const rect = canvas.getBoundingClientRect();
+  const col  = Math.floor((event.clientX - rect.left) / SQUARE_SIZE);
+  const row  = Math.floor((event.clientY - rect.top)  / SQUARE_SIZE);
+  const clickedPiece = board[row][col];
+
+  if (selectedSquare === null) {
+    if (!isMine(clickedPiece)) return;
+    selectedSquare = { row, col };
+    legalMoves = getLegalMoves(row, col);
+    drawBoard();
+    return;
+  }
+
+  if (selectedSquare.row === row && selectedSquare.col === col) {
+    selectedSquare = null;
+    legalMoves = [];
+    drawBoard();
+    return;
   }
 
   if (isMine(clickedPiece)) {
-    selectedSquare = {row,col};
-    legalMoves = getLegalMoves(row,col);
-    drawBoard(); return;
+    selectedSquare = { row, col };
+    legalMoves = getLegalMoves(row, col);
+    drawBoard();
+    return;
   }
 
-  const isLegal = legalMoves.some(m => m.row===row && m.col===col);
+  const isLegal = legalMoves.some(m => m.row === row && m.col === col);
   if (isLegal) {
     movePiece(selectedSquare.row, selectedSquare.col, row, col);
-    selectedSquare = null; legalMoves = []; drawBoard();
+    selectedSquare = null;
+    legalMoves = [];
+    drawBoard();
   } else {
-    const dot = `<span class="turn-dot"></span>`;
-    statusEl.innerHTML = dot + "Invalid move — try again";
-    selectedSquare = null; legalMoves = []; drawBoard();
+    statusEl.textContent = "Invalid move! Try again.";
+    selectedSquare = null;
+    legalMoves = [];
+    drawBoard();
   }
 });
 
-// ── Start ────────────────────────────────────────────────────
+// ─── START ───────────────────────────────────────────────────
 drawBoard();
