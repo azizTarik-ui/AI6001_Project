@@ -8,29 +8,72 @@
   <body>
     <div class="container">
       <h1>Game History</h1>
-      <table>
+      <p id="welcome" style="color:#c9a84c;"></p>
+
+      <table id="history-table">
         <thead>
           <tr>
             <th>#</th>
             <th>Result</th>
+            <th>Moves</th>
             <th>Date</th>
           </tr>
         </thead>
-        <tbody>
-          <!-- Game records will go here later -->
-          <tr>
-            <td>1</td>
-            <td>Win</td>
-            <td>2024-01-01</td>
-          </tr>
-          <tr>
-            <td>2</td>
-            <td>Loss</td>
-            <td>2024-01-02</td>
-          </tr>
+        <tbody id="history-body">
+          <tr><td colspan="4">Loading...</td></tr>
         </tbody>
       </table>
-      <a href="index.html" class="btn">Back to Home</a>
+
+      <a href="play.html" class="btn">Play Again</a>
+      <a href="index.html" class="btn">Home</a>
     </div>
+
+    <script>
+      const username = localStorage.getItem("username");
+
+      // Show username at top
+      if (username) {
+        document.getElementById("welcome").textContent = username + "'s games";
+      }
+
+      // Load game history from the backend
+      async function loadHistory() {
+        const tbody = document.getElementById("history-body");
+
+        if (!username) {
+          tbody.innerHTML = "<tr><td colspan='4'>Not logged in.</td></tr>";
+          return;
+        }
+
+        try {
+          const res   = await fetch("/api/history/" + username);
+          const games = await res.json();
+
+          if (games.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='4'>No games yet.</td></tr>";
+            return;
+          }
+
+          // Build one table row per game
+          tbody.innerHTML = games.map((game, index) => {
+            const date  = new Date(game.playedAt).toLocaleDateString();
+            const moves = game.moves ? game.moves.length : 0;
+            return `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${game.result}</td>
+                <td>${moves}</td>
+                <td>${date}</td>
+              </tr>
+            `;
+          }).join("");
+
+        } catch (err) {
+          tbody.innerHTML = "<tr><td colspan='4'>Could not load history.</td></tr>";
+        }
+      }
+
+      loadHistory();
+    </script>
   </body>
 </html>

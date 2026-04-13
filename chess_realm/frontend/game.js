@@ -25,12 +25,14 @@ let selectedSquare = null;
 let lastMove       = null;
 let legalMoves     = [];
 let audioContext   = null;
+let moveHistory = []; 
 
 // ─── RESIGN ──────────────────────────────────────────────────
 
 function resignGame() {
   statusEl.textContent = "You resigned. Game over.";
   currentTurn = "over";
+  saveGame("loss");
 }
 
 // ─── PIECE HELPERS ───────────────────────────────────────────
@@ -344,6 +346,9 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   lastMove = { row: toRow, col: toCol };
   playMoveSound(isCapture);
 
+  moveHistory.push({ from: `${fromRow},${fromCol}`, to: `${toRow},${toCol}` });
+
+
   recordBoard(board);
 
   // Switch turns
@@ -356,6 +361,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
     const winner = currentTurn === "white" ? "Black wins!" : "White wins!";
     statusEl.textContent = "Checkmate! " + winner;
     currentTurn = "over";
+    saveGame(currentTurn === "white" ? "loss" : "win");
     drawBoard();
     return;
   }
@@ -363,6 +369,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   if (state === "stalemate") {
     statusEl.textContent = "Stalemate! It's a draw.";
     currentTurn = "over";
+    saveGame("draw");
     drawBoard();
     return;
   }
@@ -441,6 +448,21 @@ canvas.addEventListener("click", function(event) {
     drawBoard();
   }
 });
+
+async function saveGame(result) {
+  const username = localStorage.getItem("username");
+  if (!username) return; // not logged in, skip saving
+
+  try {
+    await fetch("/api/game", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ username, result, moves: moveHistory }),
+    });
+  } catch (err) {
+    console.log("Could not save game:", err);
+  }
+}
 
 // ─── START ───────────────────────────────────────────────────
 drawBoard();
