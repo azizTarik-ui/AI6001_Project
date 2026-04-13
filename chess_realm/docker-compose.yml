@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+
+  # --- Node/Express app ---
+  app:
+    build: .                        # build using our Dockerfile
+    ports:
+      - "3000:3000"                 # your computer port : container port
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/chessrealm
+      - PORT=3000
+    depends_on:
+      - mongo                       # wait for mongo to start first
+    restart: unless-stopped         # restart if it crashes
+
+  # --- MongoDB ---
+  mongo:
+    image: mongo:6                  # use official MongoDB image, no Dockerfile needed
+    ports:
+      - "27017:27017"               # expose so you can inspect it locally if needed
+    volumes:
+      - mongo-data:/data/db         # save database data permanently on your computer
+
+# This volume stores MongoDB data even after containers stop
+volumes:
+  mongo-data:
