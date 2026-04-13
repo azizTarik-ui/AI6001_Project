@@ -3,12 +3,12 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 
 const SQUARE_SIZE = 60;
-const LIGHT = "#f0d9b5";
-const DARK  = "#b58863";
-const HIGHLIGHT = "#aef359";  // selected square
-const MOVED_TO  = "#59aef3";  // where piece just landed
+const LIGHT      = "#f0d9b5";
+const DARK       = "#b58863";
+const HIGHLIGHT  = "#aef359";
+const MOVED_TO   = "#59aef3";
+const LEGAL_DOT  = "#00000033"; // dark dot shown on legal squares
 
-// The board — row 0 is top (black side), row 7 is bottom (white side)
 let board = [
   ["♜","♞","♝","♛","♚","♝","♞","♜"],
   ["♟","♟","♟","♟","♟","♟","♟","♟"],
@@ -20,73 +20,153 @@ let board = [
   ["♖","♘","♗","♕","♔","♗","♘","♖"],
 ];
 
-// Whose turn is it? "white" or "black"
-let currentTurn = "white";
-
-// Which square is selected right now?
+let currentTurn  = "white";
 let selectedSquare = null;
+let lastMove       = null;
+let legalMoves     = []; // squares the selected piece can move to
 
-// Last move — used to show a blue highlight
-let lastMove = null;
+// ─── PIECE HELPERS ───────────────────────────────────────────
 
-// --- HELPERS ---
-
-// White pieces are these symbols
 const whitePieces = ["♙","♖","♘","♗","♕","♔"];
 const blackPieces = ["♟","♜","♞","♝","♛","♚"];
 
-function isWhite(piece) {
-  return whitePieces.includes(piece);
+function isWhite(p)  { return whitePieces.includes(p); }
+function isBlack(p)  { return blackPieces.includes(p); }
+function isEmpty(p)  { return p === ""; }
+
+function isMine(p) {
+  return currentTurn === "white" ? isWhite(p) : isBlack(p);
+}
+function isOpponent(p) {
+  return currentTurn === "white" ? isBlack(p) : isWhite(p);
 }
 
-function isBlack(piece) {
-  return blackPieces.includes(piece);
+function inBounds(r, c) {
+  return r >= 0 && r <= 7 && c >= 0 && c <= 7;
 }
 
-function isCurrentPlayerPiece(piece) {
-  if (currentTurn === "white") return isWhite(piece);
-  if (currentTurn === "black") return isBlack(piece);
-  return false;
+// ─── LEGAL MOVE CALCULATOR ───────────────────────────────────
+
+// Returns an array of {row, col} squares a piece can move to.
+function getLegalMoves(row, col) {
+  const piece = board[row][col];
+  const moves = [];
+
+  // Sliding pieces (rook, bishop, queen) move along rays.
+  // We keep going until we hit a wall, our own piece, or capture an opponent.
+  function slide(directions) {
+    for (const [dr, dc] of directions) {
+      let r = row + dr;
+      let c = col + dc;
+      while (inBounds(r, c)) {
+        if (isEmpty(board[r][c])) {
+          moves.push({ row: r, col: c });
+        } else if (isOpponent(board[r][c])) {
+          moves.push({ row: r, col: c }); // capture then stop
+          break;
+        } else {
+          break; // blocked by own piece
+        }
+        r += dr;
+        c += dc;
+      }
+    }
+  }
+
+  // Jumping pieces (knight, king) just check each target square once.
+  function jump(targets) {
+    for (const [dr, dc] of targets) {
+      const r = row + dr;
+      const c = col + dc;
+      if (inBounds(r, c) && !isMine(board[r][c])) {
+        moves.push({ row: r, col: c });
+      }
+    }
+  }
+
+  // ── PAWN ──
+  if (piece === "♙") { // white pawn moves UP (row decreases)
+    // One step forward
+    if (inBounds(row-1, col) && isEmpty(board[row-1][col])) {
+      moves.push({ row: row-1, col });
+      // Two steps from starting row
+      if (row === 6 && isEmpty(board[row-2][col])) {
+        moves.push({ row: row-2, col });
+      }
+    }
+    // Diagonal captures
+    for (const dc of [-1, 1]) {
+      if (inBounds(row-1, col+dc) && isBlack(board[row-1][col+dc])) {
+        moves.push({ row: row-1, col: col+dc });
+      }
+    }
+  }
+
+  if (piece === "♟") { // black pawn moves DOWN (row increases)
+    if (inBounds(row+1, col) && isEmpty(board[row+1][col])) {
+      moves.push({ row: row+1, col });
+      if (row === 1 && isEmpty(board[row+2][col])) {
+        moves.push({ row: row+2, col });
+      }
+    }
+    for (const dc of [-1, 1]) {
+      if (inBounds(row+1, col+dc) && isWhite(board[row+1][col+dc])) {
+        moves.push({ row: row+1, col: col+dc });
+      }
+    }
+  }
+
+  // ── ROOK ──
+  if (piece === "♖" || piece === "♜") {
+    slide([[1,0],[-1,0],[0,1],[0,-1]]);
+  }
+
+  // ── BISHOP ──
+  if (piece === "♗" || piece === "♝") {
+    slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+
+  // ── QUEEN ──
+  if (piece === "♕" || piece === "♛") {
+    slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+
+  // ── KNIGHT ──
+  if (piece === "♘" || piece === "♞") {
+    jump([[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]]);
+  }
+
+  // ── KING ──
+  if (piece === "♔" || piece === "♚") {
+    jump([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+
+  return moves;
 }
 
-function isOpponentPiece(piece) {
-  if (currentTurn === "white") return isBlack(piece);
-  if (currentTurn === "black") return isWhite(piece);
-  return false;
-}
-
-// --- DRAW ---
+// ─── DRAW ────────────────────────────────────────────────────
 
 function drawBoard() {
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
 
-      // Default square color
-      const isLight = (row + col) % 2 === 0;
-      let color = isLight ? LIGHT : DARK;
+      // Square color
+      let color = (row + col) % 2 === 0 ? LIGHT : DARK;
 
-      // Highlight selected square
       if (selectedSquare &&
           selectedSquare.row === row &&
           selectedSquare.col === col) {
         color = HIGHLIGHT;
       }
 
-      // Highlight last move destination
       if (lastMove &&
           lastMove.row === row &&
           lastMove.col === col) {
         color = MOVED_TO;
       }
 
-      // Draw square
       ctx.fillStyle = color;
-      ctx.fillRect(
-        col * SQUARE_SIZE,
-        row * SQUARE_SIZE,
-        SQUARE_SIZE,
-        SQUARE_SIZE
-      );
+      ctx.fillRect(col*SQUARE_SIZE, row*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
 
       // Draw piece
       const piece = board[row][col];
@@ -95,105 +175,86 @@ function drawBoard() {
         ctx.font = "40px Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(
-          piece,
-          col * SQUARE_SIZE + SQUARE_SIZE / 2,
-          row * SQUARE_SIZE + SQUARE_SIZE / 2
+        ctx.fillText(piece,
+          col*SQUARE_SIZE + SQUARE_SIZE/2,
+          row*SQUARE_SIZE + SQUARE_SIZE/2
         );
       }
     }
   }
+
+  // Draw dots on legal move squares
+  for (const { row, col } of legalMoves) {
+    ctx.fillStyle = LEGAL_DOT;
+    ctx.beginPath();
+    ctx.arc(
+      col*SQUARE_SIZE + SQUARE_SIZE/2,
+      row*SQUARE_SIZE + SQUARE_SIZE/2,
+      12, 0, Math.PI*2
+    );
+    ctx.fill();
+  }
 }
 
-// --- MOVE LOGIC ---
+// ─── MOVE ────────────────────────────────────────────────────
 
-// Check if a move is allowed (very basic rules only)
-function isMoveAllowed(fromRow, fromCol, toRow, toCol) {
-  const target = board[toRow][toCol];
-
-  // Rule 1: Cannot move to a square your own piece is on
-  if (isCurrentPlayerPiece(target)) {
-    return false;
-  }
-
-  // Rule 2: Must actually move somewhere
-  if (fromRow === toRow && fromCol === toCol) {
-    return false;
-  }
-
-  // All other moves allowed for now
-  // (We will add piece-specific rules in the next step)
-  return true;
-}
-
-// Move a piece from one square to another
 function movePiece(fromRow, fromCol, toRow, toCol) {
   board[toRow][toCol] = board[fromRow][fromCol];
   board[fromRow][fromCol] = "";
-
-  // Remember where we just moved to (for blue highlight)
   lastMove = { row: toRow, col: toCol };
-
-  // Switch turns
   currentTurn = currentTurn === "white" ? "black" : "white";
-
-  // Update the status text
   statusEl.textContent = currentTurn === "white"
     ? "Your turn (White)"
-    : "AI thinking... (Black)";
+    : "Black's turn";
 }
 
-// --- CLICK HANDLER ---
+// ─── CLICK ───────────────────────────────────────────────────
 
-canvas.addEventListener("click", function (event) {
+canvas.addEventListener("click", function(event) {
   const rect = canvas.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-
-  const col = Math.floor(x / SQUARE_SIZE);
-  const row = Math.floor(y / SQUARE_SIZE);
-
+  const col  = Math.floor((event.clientX - rect.left) / SQUARE_SIZE);
+  const row  = Math.floor((event.clientY - rect.top)  / SQUARE_SIZE);
   const clickedPiece = board[row][col];
 
-  // --- First click: select a piece ---
+  // Nothing selected yet — try to select a piece
   if (selectedSquare === null) {
-    // Only allow selecting your own pieces
-    if (!isCurrentPlayerPiece(clickedPiece)) {
-      return; // ignore click
-    }
+    if (!isMine(clickedPiece)) return;
     selectedSquare = { row, col };
+    legalMoves = getLegalMoves(row, col);
     drawBoard();
     return;
   }
 
-  // --- Second click: move or reselect ---
-
-  // If clicked the same square, deselect
+  // Clicked the same square — deselect
   if (selectedSquare.row === row && selectedSquare.col === col) {
     selectedSquare = null;
+    legalMoves = [];
     drawBoard();
     return;
   }
 
-  // If clicked another one of your own pieces, switch selection
-  if (isCurrentPlayerPiece(clickedPiece)) {
+  // Clicked another one of your own pieces — switch selection
+  if (isMine(clickedPiece)) {
     selectedSquare = { row, col };
+    legalMoves = getLegalMoves(row, col);
     drawBoard();
     return;
   }
 
-  // Try to move
-  if (isMoveAllowed(selectedSquare.row, selectedSquare.col, row, col)) {
+  // Check if destination is a legal move
+  const isLegal = legalMoves.some(m => m.row === row && m.col === col);
+  if (isLegal) {
     movePiece(selectedSquare.row, selectedSquare.col, row, col);
     selectedSquare = null;
+    legalMoves = [];
     drawBoard();
   } else {
-    // Move not allowed — flash a message
     statusEl.textContent = "Invalid move! Try again.";
     selectedSquare = null;
+    legalMoves = [];
     drawBoard();
   }
 });
 
-// --- START ---
+// ─── START ───────────────────────────────────────────────────
 drawBoard();
