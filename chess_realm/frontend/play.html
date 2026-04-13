@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Chess Realm – Play</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+
+    <p class="page-title">Chess Realm</p>
+    <p class="page-subtitle">May the better mind prevail</p>
+
+    <div class="game-layout">
+
+      <!-- Board -->
+      <div class="board-wrap">
+        <div class="board-frame">
+          <canvas id="chessBoard" width="480" height="480"></canvas>
+        </div>
+        <div class="file-labels">
+          <span>a</span><span>b</span><span>c</span>
+          <span>d</span><span>e</span><span>f</span>
+          <span>g</span><span>h</span>
+        </div>
+      </div>
+
+      <!-- Side panel -->
+      <div class="side-panel">
+
+        <!-- Status -->
+        <div class="status-card">
+          <div class="status-label">Current Turn</div>
+          <div id="status"><span class="turn-dot"></span>Your turn (White)</div>
+        </div>
+
+        <!-- Move list -->
+        <div class="move-card">
+          <h3>Move History</h3>
+          <div id="moves"><span style="color:#55556a;font-style:italic;">No moves yet</span></div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="button-group">
+          <a href="index.html" class="btn">← Home</a>
+          <a href="history.html" class="btn">Game History</a>
+          <button class="btn danger" onclick="location.reload()">Resign</button>
+        </div>
+
+      </div>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
