@@ -6,25 +6,46 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="container">
-      <h1>Chess Realm</h1>
 
-      <!-- Status message -->
-      <p id="status">Your turn (White)</p>
+    <p class="page-title">Chess Realm</p>
+    <p class="page-subtitle">May the better mind prevail</p>
 
-      <!-- Chess board canvas -->
-      <canvas id="chessBoard" width="480" height="480"></canvas>
+    <div class="game-layout">
 
-      <!-- Move list -->
-      <div class="move-list">
-        <h3>Moves</h3>
-        <p id="moves">No moves yet.</p>
+      <!-- Board -->
+      <div class="board-wrap">
+        <div class="board-frame">
+          <canvas id="chessBoard" width="480" height="480"></canvas>
+        </div>
+        <div class="file-labels">
+          <span>a</span><span>b</span><span>c</span>
+          <span>d</span><span>e</span><span>f</span>
+          <span>g</span><span>h</span>
+        </div>
       </div>
 
-      <!-- Buttons -->
-      <div class="button-group">
-        <button class="btn">Resign</button>
-        <a href="history.html" class="btn">View History</a>
+      <!-- Side panel -->
+      <div class="side-panel">
+
+        <!-- Status -->
+        <div class="status-card">
+          <div class="status-label">Current Turn</div>
+          <div id="status"><span class="turn-dot"></span>Your turn (White)</div>
+        </div>
+
+        <!-- Move list -->
+        <div class="move-card">
+          <h3>Move History</h3>
+          <div id="moves"><span style="color:#55556a;font-style:italic;">No moves yet</span></div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="button-group">
+          <a href="index.html" class="btn">← Home</a>
+          <a href="history.html" class="btn">Game History</a>
+          <button class="btn danger" onclick="location.reload()">Resign</button>
+        </div>
+
       </div>
     </div>
 
