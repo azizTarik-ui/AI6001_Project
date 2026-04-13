@@ -8,16 +8,53 @@
   <body>
     <div class="container">
       <h1>Register</h1>
+
       <div class="form-group">
         <label>Username</label>
-        <input type="text" placeholder="Choose a username" />
+        <input type="text" id="username" placeholder="Choose a username" />
       </div>
+
       <div class="form-group">
         <label>Password</label>
-        <input type="password" placeholder="Choose a password" />
+        <input type="password" id="password" placeholder="At least 6 characters" />
       </div>
-      <button class="btn">Register</button>
+
+      <!-- Shows error or success messages -->
+      <p id="message" style="min-height:20px;"></p>
+
+      <button class="btn" onclick="register()">Register</button>
       <p>Already have an account? <a href="login.html">Login</a></p>
     </div>
+
+    <script>
+      async function register() {
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+        const message  = document.getElementById("message");
+
+        if (!username || !password) {
+          message.textContent = "Please fill in both fields.";
+          return;
+        }
+
+        try {
+          const res  = await fetch("/api/register", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ username, password }),
+          });
+          const data = await res.json();
+
+          if (res.ok) {
+            message.textContent = "Registered! Redirecting to login...";
+            setTimeout(() => window.location.href = "login.html", 1500);
+          } else {
+            message.textContent = data.message;
+          }
+        } catch (err) {
+          message.textContent = "Could not reach the server.";
+        }
+      }
+    </script>
   </body>
 </html>
