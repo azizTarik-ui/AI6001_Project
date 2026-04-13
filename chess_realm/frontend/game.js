@@ -25,7 +25,6 @@ let selectedSquare = null;
 let lastMove       = null;
 let legalMoves     = [];
 let audioContext   = null;
-let moveHistory = []; 
 let moveHistory = []; // tracks all moves made this game
 
 // ─── RESIGN ──────────────────────────────────────────────────
