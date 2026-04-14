@@ -1,0 +1,11 @@
+# Ignore local dependencies and build artifacts
+**/node_modules
+**/npm-debug.log
+
+# Git and editor metadata
+.git
+.gitignore
+.vscode
+
+# macOS metadata
+.DS_Store
