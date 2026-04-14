@@ -54,7 +54,7 @@ function evaluateBoard(board) {
 
 // ─── GET ALL MOVES FOR ONE SIDE ───────────────────────────────
 
-function getAllMoves(board, color) {
+function getAllMoves(board, color, rights = castleRights) {
   const moves = [];
   const mine = color === "white"
     ? ["♙","♖","♘","♗","♕","♔"]
@@ -63,10 +63,7 @@ function getAllMoves(board, color) {
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
       if (mine.includes(board[row][col])) {
-        const saved = currentTurn;
-        currentTurn = color;
-        const targets = getLegalMoves(row, col);
-        currentTurn = saved;
+        const targets = getLegalMovesForBoard(board, row, col, color, rights);
 
         for (const t of targets) {
           moves.push({ fromRow: row, fromCol: col, toRow: t.row, toCol: t.col });
@@ -79,27 +76,34 @@ function getAllMoves(board, color) {
 
 // ─── APPLY A MOVE TO A COPY OF THE BOARD ─────────────────────
 
-function applyMove(board, move) {
+function applyMove(board, move, rights = castleRights) {
   const copy = board.map(row => [...row]);
-  copy[move.toRow][move.toCol] = copy[move.fromRow][move.fromCol];
+  const piece = copy[move.fromRow][move.fromCol];
+  const nextRights = updateCastleRightsAfterMove(rights, board, move.fromRow, move.fromCol, move.toRow, move.toCol);
+
+  if (isCastleMove(piece, move.fromRow, move.fromCol, move.toRow, move.toCol)) {
+    moveRookForCastle(copy, isWhite(piece) ? "white" : "black", move.toCol);
+  }
+
+  copy[move.toRow][move.toCol] = piece;
   copy[move.fromRow][move.fromCol] = "";
-  return copy;
+  return { board: copy, rights: nextRights };
 }
 
 // ─── MINIMAX WITH ALPHA-BETA PRUNING ─────────────────────────
 
-function minimax(board, depth, alpha, beta, isMaximizing) {
+function minimax(board, depth, alpha, beta, isMaximizing, rights = castleRights) {
   if (depth === 0) {
     return evaluateBoard(board);
   }
 
   if (isMaximizing) {
     let best = -Infinity;
-    const moves = getAllMoves(board, "white");
+    const moves = getAllMoves(board, "white", rights);
 
     for (const move of moves) {
-      const newBoard = applyMove(board, move);
-      const score = minimax(newBoard, depth - 1, alpha, beta, false);
+      const nextState = applyMove(board, move, rights);
+      const score = minimax(nextState.board, depth - 1, alpha, beta, false, nextState.rights);
       best = Math.max(best, score);
       alpha = Math.max(alpha, score);
       if (beta <= alpha) break;
@@ -108,11 +112,11 @@ function minimax(board, depth, alpha, beta, isMaximizing) {
 
   } else {
     let best = Infinity;
-    const moves = getAllMoves(board, "black");
+    const moves = getAllMoves(board, "black", rights);
 
     for (const move of moves) {
-      const newBoard = applyMove(board, move);
-      const score = minimax(newBoard, depth - 1, alpha, beta, true);
+      const nextState = applyMove(board, move, rights);
+      const score = minimax(nextState.board, depth - 1, alpha, beta, true, nextState.rights);
       best = Math.min(best, score);
       beta = Math.min(beta, score);
       if (beta <= alpha) break;
@@ -127,22 +131,22 @@ function minimax(board, depth, alpha, beta, isMaximizing) {
 // Higher number = AI avoids repetition more strongly.
 const REPETITION_PENALTY = 0.5;
 
-function getBestMove(board) {
-  const moves = getAllMoves(board, "black");
+function getBestMove(board, rights = castleRights) {
+  const moves = getAllMoves(board, "black", rights);
 
   let bestScore = Infinity;
   let bestMoves = []; // collect ALL moves that tie for best score
 
   for (const move of moves) {
-    const newBoard = applyMove(board, move);
+    const nextState = applyMove(board, move, rights);
 
     // Run minimax to score this move
-    let score = minimax(newBoard, 2, -Infinity, Infinity, true);
+    let score = minimax(nextState.board, 2, -Infinity, Infinity, true, nextState.rights);
 
     // If this position has been seen before, make it less attractive.
     // Each past repetition adds a penalty (remember: black wants LOW scores,
     // so we ADD the penalty to make the score worse for black).
-    const repeated = countRepetitions(newBoard);
+    const repeated = countRepetitions(nextState.board);
     if (repeated > 0) {
       score += repeated * REPETITION_PENALTY;
     }

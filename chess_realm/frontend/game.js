@@ -26,6 +26,10 @@ let lastMove       = null;
 let legalMoves     = [];
 let audioContext   = null;
 let moveHistory = []; // tracks all moves made this game
+let castleRights = {
+  white: { kingSide: true, queenSide: true },
+  black: { kingSide: true, queenSide: true },
+};
 
 // ─── RESIGN ──────────────────────────────────────────────────
 
@@ -44,6 +48,73 @@ const blackPieces = ["♟","♜","♞","♝","♛","♚"];
 function isWhite(p) { return whitePieces.includes(p); }
 function isBlack(p) { return blackPieces.includes(p); }
 function isEmpty(p) { return p === ""; }
+
+function isKing(p) {
+  return p === "♔" || p === "♚";
+}
+
+function isRook(p) {
+  return p === "♖" || p === "♜";
+}
+
+function getColorOfPiece(p) {
+  if (isWhite(p)) return "white";
+  if (isBlack(p)) return "black";
+  return null;
+}
+
+function cloneCastleRights(rights) {
+  return {
+    white: { ...rights.white },
+    black: { ...rights.black },
+  };
+}
+
+function isCastleMove(piece, fromRow, fromCol, toRow, toCol) {
+  return isKing(piece) && fromRow === toRow && Math.abs(toCol - fromCol) === 2;
+}
+
+function moveRookForCastle(boardState, color, toCol) {
+  const row = color === "white" ? 7 : 0;
+  if (toCol === 6) {
+    boardState[row][5] = boardState[row][7];
+    boardState[row][7] = "";
+  } else if (toCol === 2) {
+    boardState[row][3] = boardState[row][0];
+    boardState[row][0] = "";
+  }
+}
+
+function updateCastleRightsAfterMove(rights, boardState, fromRow, fromCol, toRow, toCol) {
+  const nextRights = cloneCastleRights(rights);
+  const movingPiece = boardState[fromRow][fromCol];
+  const capturedPiece = boardState[toRow][toCol];
+  const movingColor = getColorOfPiece(movingPiece);
+  const capturedColor = getColorOfPiece(capturedPiece);
+
+  if (movingColor) {
+    if (isKing(movingPiece)) {
+      nextRights[movingColor].kingSide = false;
+      nextRights[movingColor].queenSide = false;
+    }
+
+    if (isRook(movingPiece)) {
+      if (movingColor === "white" && fromRow === 7 && fromCol === 7) nextRights.white.kingSide = false;
+      if (movingColor === "white" && fromRow === 7 && fromCol === 0) nextRights.white.queenSide = false;
+      if (movingColor === "black" && fromRow === 0 && fromCol === 7) nextRights.black.kingSide = false;
+      if (movingColor === "black" && fromRow === 0 && fromCol === 0) nextRights.black.queenSide = false;
+    }
+  }
+
+  if (capturedColor && isRook(capturedPiece)) {
+    if (capturedColor === "white" && toRow === 7 && toCol === 7) nextRights.white.kingSide = false;
+    if (capturedColor === "white" && toRow === 7 && toCol === 0) nextRights.white.queenSide = false;
+    if (capturedColor === "black" && toRow === 0 && toCol === 7) nextRights.black.kingSide = false;
+    if (capturedColor === "black" && toRow === 0 && toCol === 0) nextRights.black.queenSide = false;
+  }
+
+  return nextRights;
+}
 
 function isMine(p) {
   return currentTurn === "white" ? isWhite(p) : isBlack(p);
@@ -97,12 +168,14 @@ function playMoveSound(isCapture) {
 // We need a separate raw version to avoid infinite loops
 // when checking if the king is safe.
 
-function getRawMoves(board, row, col, color) {
+function getRawMoves(board, row, col, color, options = {}) {
   const piece = board[row][col];
   const moves = [];
 
   const myColor   = color;
   const oppColor  = color === "white" ? "black" : "white";
+  const includeCastling = options.includeCastling !== false;
+  const rights = options.castleRights || castleRights;
 
   function isMineRaw(p)  { return myColor  === "white" ? isWhite(p) : isBlack(p); }
   function isOppRaw(p)   { return oppColor === "white" ? isWhite(p) : isBlack(p); }
@@ -178,6 +251,19 @@ function getRawMoves(board, row, col, color) {
   }
   if (piece === "♔" || piece === "♚") {
     jump([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+
+    if (includeCastling) {
+      const kingSideTarget = canCastle(board, color, "kingSide", rights);
+      const queenSideTarget = canCastle(board, color, "queenSide", rights);
+
+      if (kingSideTarget !== false) {
+        moves.push({ row, col: kingSideTarget });
+      }
+
+      if (queenSideTarget !== false) {
+        moves.push({ row, col: queenSideTarget });
+      }
+    }
   }
 
   return moves;
@@ -187,6 +273,10 @@ function getRawMoves(board, row, col, color) {
 // Returns true if the given color's king is under attack.
 
 function isInCheck(board, color) {
+  return isInCheckWithRights(board, color, castleRights);
+}
+
+function isInCheckWithRights(board, color, rights) {
   // Find the king
   const kingSymbol = color === "white" ? "♔" : "♚";
   let kingRow = -1, kingCol = -1;
@@ -203,17 +293,24 @@ function isInCheck(board, color) {
   // If king not found (shouldn't happen), treat as check
   if (kingRow === -1) return true;
 
-  // Check if any opponent piece can reach the king
   const opponent = color === "white" ? "black" : "white";
-  const oppPieces = opponent === "white" ? whitePieces : blackPieces;
+
+  return isSquareAttacked(board, kingRow, kingCol, opponent, rights);
+}
+
+function isSquareAttacked(board, targetRow, targetCol, attackerColor, rights = castleRights) {
+  const attackerPieces = attackerColor === "white" ? whitePieces : blackPieces;
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
-      if (oppPieces.includes(board[r][c])) {
-        const attacks = getRawMoves(board, r, c, opponent);
+      if (attackerPieces.includes(board[r][c])) {
+        const attacks = getRawMoves(board, r, c, attackerColor, {
+          includeCastling: false,
+          castleRights: rights,
+        });
         for (const a of attacks) {
-          if (a.row === kingRow && a.col === kingCol) {
-            return true; // king is under attack
+          if (a.row === targetRow && a.col === targetCol) {
+            return true;
           }
         }
       }
@@ -223,23 +320,62 @@ function isInCheck(board, color) {
   return false;
 }
 
+function canCastle(board, color, side, rights = castleRights) {
+  const row = color === "white" ? 7 : 0;
+  const kingCol = 4;
+  const rookCol = side === "kingSide" ? 7 : 0;
+  const targetCol = side === "kingSide" ? 6 : 2;
+  const pathCols = side === "kingSide" ? [5, 6] : [1, 2, 3];
+  const kingPathCols = side === "kingSide" ? [4, 5, 6] : [4, 3, 2];
+  const kingPiece = color === "white" ? "♔" : "♚";
+  const rookPiece = color === "white" ? "♖" : "♜";
+  const opponent = color === "white" ? "black" : "white";
+
+  if (!rights[color][side]) return false;
+  if (board[row][kingCol] !== kingPiece || board[row][rookCol] !== rookPiece) return false;
+
+  for (const col of pathCols) {
+    if (!isEmpty(board[row][col])) return false;
+  }
+
+  for (const col of kingPathCols) {
+    if (isSquareAttacked(board, row, col, opponent, rights)) {
+      return false;
+    }
+  }
+
+  return targetCol;
+}
+
 // ─── LEGAL MOVES (with check filtering) ──────────────────────
 // Same as raw moves, but removes any move that would leave
 // our own king in check.
 
 function getLegalMoves(row, col) {
-  const color = currentTurn;
-  const rawMoves = getRawMoves(board, row, col, color);
+  return getLegalMovesForBoard(board, row, col, currentTurn, castleRights);
+}
+
+function getLegalMovesForBoard(boardState, row, col, color, rights = castleRights) {
+  const rawMoves = getRawMoves(boardState, row, col, color, {
+    includeCastling: true,
+    castleRights: rights,
+  });
   const safe = [];
 
   for (const move of rawMoves) {
     // Try the move on a copy of the board
-    const copy = board.map(r => [...r]);
-    copy[move.row][move.col] = copy[row][col];
+    const copy = boardState.map(r => [...r]);
+    const piece = copy[row][col];
+
+    if (isCastleMove(piece, row, col, move.row, move.col)) {
+      moveRookForCastle(copy, color, move.col);
+    }
+
+    copy[move.row][move.col] = piece;
     copy[row][col] = "";
 
     // Only keep the move if our king is not in check after it
-    if (!isInCheck(copy, color)) {
+    if (!isInCheckWithRights(copy, color, rights)) {
       safe.push(move);
     }
   }
@@ -251,15 +387,17 @@ function getLegalMoves(row, col) {
 // Used to detect checkmate and stalemate.
 
 function getAllLegalMoves(board, color) {
+  return getAllLegalMovesForBoard(board, color, castleRights);
+}
+
+function getAllLegalMovesForBoard(boardState, color, rights = castleRights) {
   const pieces = color === "white" ? whitePieces : blackPieces;
   const moves = [];
-  const saved = currentTurn;
-  currentTurn = color;
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
-      if (pieces.includes(board[r][c])) {
-        const pieceMoves = getLegalMoves(r, c);
+      if (pieces.includes(boardState[r][c])) {
+        const pieceMoves = getLegalMovesForBoard(boardState, r, c, color, rights);
         for (const m of pieceMoves) {
           moves.push({ fromRow: r, fromCol: c, toRow: m.row, toCol: m.col });
         }
@@ -267,7 +405,6 @@ function getAllLegalMoves(board, color) {
     }
   }
 
-  currentTurn = saved;
   return moves;
 }
 
@@ -276,10 +413,14 @@ function getAllLegalMoves(board, color) {
 // Returns "checkmate", "stalemate", or null.
 
 function getGameOverState(color) {
-  const moves = getAllLegalMoves(board, color);
+  return getGameOverStateForBoard(board, color, castleRights);
+}
+
+function getGameOverStateForBoard(boardState, color, rights = castleRights) {
+  const moves = getAllLegalMovesForBoard(boardState, color, rights);
 
   if (moves.length === 0) {
-    if (isInCheck(board, color)) {
+    if (isInCheckWithRights(boardState, color, rights)) {
       return "checkmate";
     } else {
       return "stalemate";
@@ -342,7 +483,16 @@ function drawBoard() {
 
 function movePiece(fromRow, fromCol, toRow, toCol) {
   const isCapture = board[toRow][toCol] !== "";
-  board[toRow][toCol] = board[fromRow][fromCol];
+  const movingPiece = board[fromRow][fromCol];
+  const castleMove = isCastleMove(movingPiece, fromRow, fromCol, toRow, toCol);
+
+  castleRights = updateCastleRightsAfterMove(castleRights, board, fromRow, fromCol, toRow, toCol);
+
+  if (castleMove) {
+    moveRookForCastle(board, isWhite(movingPiece) ? "white" : "black", toCol);
+  }
+
+  board[toRow][toCol] = movingPiece;
   board[fromRow][fromCol] = "";
   lastMove = { row: toRow, col: toCol };
   playMoveSound(isCapture);
@@ -356,7 +506,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   currentTurn = currentTurn === "white" ? "black" : "white";
 
   // Check if the other side is now in checkmate or stalemate
-  const state = getGameOverState(currentTurn);
+  const state = getGameOverStateForBoard(board, currentTurn, castleRights);
 
   if (state === "checkmate") {
     const winner = currentTurn === "white" ? "Black wins!" : "White wins!";
@@ -378,7 +528,7 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   }
 
   // Warn if the current player is in check
-  if (isInCheck(board, currentTurn)) {
+  if (isInCheckWithRights(board, currentTurn, castleRights)) {
     statusEl.textContent = currentTurn === "white"
       ? "You are in check!"
       : "AI is in check!";
