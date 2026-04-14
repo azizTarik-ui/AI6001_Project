@@ -14,13 +14,19 @@ Project Group Members:
 * Ahammed Tarik Aziz (Student ID: 202483493, email: atarikaziz@mun.ca)
 * Biplav Adhikari (Student ID: 202581517, email: biplava@mun.ca)
 
+
+
 Project URL
 
-* Paste your hosted web application URL here so I can test it
+* Web application URL: https://groupf.stu.researchatmun.ca
+
+
 
 Project Videos:
 
-* Project Presentation: YouTube URL
+* Project Presentation: https://www.youtube.com/watch?v=rQKUS4cwB5o
+
+
 
 Project Setup / Installation:
 
