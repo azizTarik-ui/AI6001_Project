@@ -45,9 +45,10 @@ Download or clone the project files to your computer.
 Once extracted, your folder should look like this:
 
 ```text
-chess-realm/
-├── frontend/
-├── backend/
+AI6001_Project/
+├── chess_realm/
+│   ├── frontend/
+│   └── backend/
 ├── Dockerfile
 ├── docker-compose.yml
 └── .dockerignore
@@ -56,7 +57,7 @@ chess-realm/
 ## Running the Project
 
 1. Open Docker Desktop and wait until it says "Docker is running".
-2. Open a terminal inside the chess-realm folder.
+2. Open a terminal inside the project root folder (`AI6001_Project`, where `docker-compose.yml` is located).
 	- Windows: Navigate to the folder in File Explorer, click the address bar, type cmd, and press Enter.
 	- Mac: Open Terminal and drag the folder into it.
 3. Run this command:
