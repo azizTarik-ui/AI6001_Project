@@ -43,7 +43,15 @@
         <div class="button-group">
           <a href="index.html" class="btn">← Home</a>
           <a href="history.html" class="btn">Game History</a>
-          <button class="btn danger" onclick="location.reload()">Resign</button>
+          <button id="resignBtn" class="btn danger">Resign</button>
+        </div>
+
+        <div id="gameOverPanel" class="game-over-panel hidden">
+          <p id="gameOverMessage">Game over.</p>
+          <div class="game-over-actions">
+            <button id="playAgainBtn" class="btn">Play Again</button>
+            <a href="index.html" class="btn">Home</a>
+          </div>
         </div>
 
       </div>

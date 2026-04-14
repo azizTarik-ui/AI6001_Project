@@ -262,6 +262,36 @@ canvas#chessBoard {
   color: #fff;
 }
 
+.game-over-panel {
+  background: var(--bg-card);
+  border: 1px solid #7a2a2a;
+  border-radius: 6px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.game-over-panel.hidden {
+  display: none;
+}
+
+#gameOverMessage {
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  color: #e7b0b0;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.game-over-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.game-over-actions .btn {
+  flex: 1;
+  padding: 10px 12px;
+}
+
 /* ── Other pages (home, login, register, history) ── */
 .container {
   background: var(--bg-card);

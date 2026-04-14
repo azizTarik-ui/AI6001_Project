@@ -1,6 +1,10 @@
 const canvas = document.getElementById("chessBoard");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
+const resignBtn = document.getElementById("resignBtn");
+const gameOverPanel = document.getElementById("gameOverPanel");
+const gameOverMessageEl = document.getElementById("gameOverMessage");
+const playAgainBtn = document.getElementById("playAgainBtn");
 
 const SQUARE_SIZE = 60;
 const LIGHT      = "#f0d9b5";
@@ -34,10 +38,27 @@ let castleRights = {
 // ─── RESIGN ──────────────────────────────────────────────────
 
 function resignGame() {
-  statusEl.textContent = "You resigned. Game over.";
+  showGameOver("Game Over: You resigned.", "loss");
+}
+
+function showGameOver(message, result) {
+  statusEl.textContent = message;
   currentTurn = "over";
-  // Add this line:
-  saveGame("loss");
+  selectedSquare = null;
+  legalMoves = [];
+
+  if (gameOverPanel && gameOverMessageEl) {
+    gameOverMessageEl.textContent = message;
+    gameOverPanel.classList.remove("hidden");
+  }
+
+  if (resignBtn) {
+    resignBtn.disabled = true;
+    resignBtn.textContent = "Game Over";
+  }
+
+  saveGame(result);
+  drawBoard();
 }
 
 // ─── PIECE HELPERS ───────────────────────────────────────────
@@ -509,21 +530,14 @@ function movePiece(fromRow, fromCol, toRow, toCol) {
   const state = getGameOverStateForBoard(board, currentTurn, castleRights);
 
   if (state === "checkmate") {
-    const winner = currentTurn === "white" ? "Black wins!" : "White wins!";
-    statusEl.textContent = "Checkmate! " + winner;
-    currentTurn = "over";
-    // Add this line:
-    saveGame(currentTurn === "white" ? "loss" : "win");
-    drawBoard();
+    const playerLost = currentTurn === "white";
+    const message = playerLost ? "Game Over: Checkmate. You lose." : "Checkmate! You win!";
+    showGameOver(message, playerLost ? "loss" : "win");
     return;
   }
 
   if (state === "stalemate") {
-    statusEl.textContent = "Stalemate! It's a draw.";
-    currentTurn = "over";
-    // Add this line:
-    saveGame("draw");
-    drawBoard();
+    showGameOver("Game Over: Stalemate. It's a draw.", "draw");
     return;
   }
 
@@ -622,3 +636,13 @@ async function saveGame(result) {
 
 // ─── START ───────────────────────────────────────────────────
 drawBoard();
+
+if (resignBtn) {
+  resignBtn.addEventListener("click", resignGame);
+}
+
+if (playAgainBtn) {
+  playAgainBtn.addEventListener("click", () => {
+    window.location.reload();
+  });
+}
