@@ -84,7 +84,7 @@ http://localhost:3000
 - Click any white piece to select it. Dots show legal moves.
 - Click a dot to move. The AI responds automatically.
 - The game ends when checkmate or stalemate is detected.
-- Click View History to see all your saved games.
+- Click View History to see all your previous records.
 - Click Resign to end the game early.
 
 ## Stopping the Application
