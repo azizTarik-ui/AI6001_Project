@@ -81,7 +81,7 @@ http://localhost:3000
 
 - Click Register to create a new account.
 - Click Login to sign in.
-- Click any white piece to select it. Green dots show legal moves.
+- Click any white piece to select it. Dots show legal moves.
 - Click a dot to move. The AI responds automatically.
 - The game ends when checkmate or stalemate is detected.
 - Click View History to see all your saved games.
